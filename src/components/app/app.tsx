@@ -1,64 +1,78 @@
-import React from 'react';
-import { AppHeader } from '@components';
-import { ConstructorPage, Feed,
-  ForgotPassword, Login,
-  NotFound404, Profile,
-  ProfileOrders, Register,
-  ResetPassword } from '@pages';
-//import { Preloader } from '@ui';
-import { Routes, Route } from 'react-router-dom';
-import {Modal} from '@components/modal';
-import { OrderInfo } from '@components/order-info';
-import {IngredientDetails} from '@components/ingredient-details';
-
-//import type { AppContentProps } from './type';
-//import type { TIngredient } from '@utils-types';
-
+import React, { useEffect, type ReactElement } from 'react';
+import {
+  AppHeader,
+  Modal,
+  OrderInfo,
+  IngredientDetails
+} from '@components';
+import {
+  ConstructorPage,
+  Feed,
+  ForgotPassword,
+  Login,
+  NotFound404,
+  Profile,
+  ProfileOrders,
+  Register,
+  ResetPassword
+} from '@pages';
+import { Preloader } from '@ui';
+import {
+  Routes,
+  Route,
+  useLocation,
+  useNavigate,
+  Navigate,
+  useParams
+} from 'react-router-dom';
+import type { AppContentProps } from './type';
+import type { TIngredient } from '@utils-types';
 
 import '../../index.css';
 
 import styles from './app.module.css';
+import { useDispatch, useSelector } from '../../services/store';
+import {
+  fetchIngredients,
+  selectIngredients,
+  selectIngredientsError,
+  selectIngredientsLoading
+} from '../../services/slices/ingredients-slice';
+import {
+  fetchUser,
+  selectUser,
+  selectIsAuthChecked,
+  markAuthChecked
+} from '@/services/slices/user-slice';
 
 
 const App = (): React.JSX.Element => {
-  // Заглушка для onClose — будет реализована позже
-  const handleClose = () => {};
-  //const ingredients: TIngredient[] = [];
-  //const isIngredientsLoading = false;
-  //const ingredientsError = null;
+  const dispatch = useDispatch();
+
+  const ingredients: TIngredient[] = useSelector(selectIngredients);
+  const isIngredientsLoading = useSelector(selectIngredientsLoading);
+  const ingredientsError = useSelector(selectIngredientsError);
+  useEffect(() => {
+    void dispatch(fetchIngredients());
+    const hasAuthToken = !!document.cookie
+      .split(';')
+      .find((c) => c.trim().startsWith('accessToken='));
+    if(hasAuthToken) {
+      void dispatch(fetchUser());
+    } else {
+      dispatch(markAuthChecked());
+    }
+  },[dispatch])
 
 
   return (
     <div className={styles.app}>
       <AppHeader />
-      {/*
       <AppContent
         ingredients={ingredients}
         isLoading={isIngredientsLoading}
         error={ingredientsError}
       />
-      */}
-
-      <Routes>
-        <Route path="/" element={<ConstructorPage />} />
-        <Route path="/feed" element={<Feed />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/profile/orders" element={<ProfileOrders />} />
-
-
-        <Route path="/feed/:number" element={<Modal title="Детали заказа"
-              onClose={handleClose}><OrderInfo/></Modal>}/>
-        <Route path="/ingredients/:id" element={<Modal  title="Информация об ингредиенте"
-              onClose={handleClose}><IngredientDetails/></Modal>}/>
-        <Route path="/profile/orders/:number" element={<Modal  title="Детали заказа"
-              onClose={handleClose}><OrderInfo/></Modal>}/>
-        <Route path="*" element={<NotFound404 />} />
-      </Routes>
-
     </div>
   );
 };
@@ -67,7 +81,7 @@ export default App;
 
 /* Маршруты показываются только когда ингредиенты загружены: без них не
    отрисовать ни конструктор, ни состав заказа. */
-/*const AppContent = ({
+const AppContent = ({
   ingredients,
   isLoading,
   error,
@@ -92,6 +106,134 @@ export default App;
   }
 
   return <RouteComponent />;
-};*/
+};
+
+type ProtectedRouteProps = {
+  onlyUnAuth?: boolean;
+  children: ReactElement;
+};
+
+type TLocationState = {
+  from?: {
+    pathname: string;
+  };
+};
+export const ProtectedRoute = ({
+  onlyUnAuth = false,
+  children,
+}: ProtectedRouteProps): React.JSX.Element => {
+  const location = useLocation();
+  const isAuthChecked = useSelector(selectIsAuthChecked);
+  const user = useSelector(selectUser);
+  const state = location.state as TLocationState | null;
+  console.log(user);
+  if (!isAuthChecked) {
+    return <Preloader />;
+  }
+
+  if (onlyUnAuth && user) {
+    const from = state?.from?.pathname ?? '/';
+    return <Navigate to={from} replace />;
+  }
+
+  if (!onlyUnAuth && !user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return children;
+};
+const OrderModalWithNumber = (): React.JSX.Element | null => {
+  const { number } = useParams<{ number: string }>();
+  const navigate = useNavigate();
+
+  if (!number) return null;
+
+  return (
+    <Modal
+      title={`#${number}`}
+      onClose={() => {
+        void navigate(-1);
+      }}
+    >
+      <OrderInfo />
+    </Modal>
+  );
+};
+type LocationState = {
+  background?: Location;
+};
+
+const RouteComponent = ():React.JSX.Element => {
+  const location = useLocation();
+  const backgroundLocation = (location.state as LocationState)?.background;
+  const navigate = useNavigate();
+  return (
+    <>
+       <Routes location={backgroundLocation ?? location}>
+        <Route path="/" element={<ConstructorPage />} />
+        <Route path="/feed" element={<Feed />} />
+        <Route path="/feed/:number" element={<OrderInfo/>}/>
+        <Route path="/ingredients/:id" element={
+            <>
+              <div style={{ textAlign: 'center', width: '100%' }}>
+                <h2 className="text text_type_main-large  detailHeader">
+                  Детали ингредиента
+                </h2>
+              </div> об ингредиенте"
+              <IngredientDetails/>
+            </>
+          }
+        />
+        <Route
+          path="/profile/orders/:number"
+          element={
+            <ProtectedRoute>
+              <OrderInfo/>
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/login" element={<ProtectedRoute onlyUnAuth><Login /></ProtectedRoute>} />
+        <Route path="/register" element={<ProtectedRoute onlyUnAuth><Register /></ProtectedRoute>} />
+        <Route path="/forgot-password" element={<ProtectedRoute onlyUnAuth><ForgotPassword /></ProtectedRoute>} />
+        <Route path="/reset-password" element={<ProtectedRoute onlyUnAuth><ResetPassword /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/profile/orders" element={<ProtectedRoute><ProfileOrders /></ProtectedRoute>} />
+        <Route path="*" element={<NotFound404 />} />
+      </Routes>
+      {backgroundLocation && (
+        <Routes>
+          <Route path="/feed/:number" element={<OrderModalWithNumber/>} />
+          <Route
+            path="/ingredients/:id"
+            element={
+              <Modal
+                title="Детали ингредиента"
+                onClose={() => {
+                  void navigate(-1);
+                }}
+              >
+                <IngredientDetails />
+              </Modal>
+            }
+          />
+          <Route
+            path="/profile/orders/:number"
+            element={
+              <ProtectedRoute>
+                <OrderModalWithNumber />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      )}
+    </>
+  );
+};
+
+
+
+
+
+
 
 

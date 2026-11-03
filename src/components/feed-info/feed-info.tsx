@@ -1,4 +1,12 @@
 import { FeedInfoUI } from '@ui';
+import {
+  selectFeedOrders,
+  selectFeedTotal,
+  selectFeedTotalToday,
+  selectFeedIsLoading,
+  selectFeedError
+} from '@/services/slices/feed-slice';
+import { useSelector } from '@/services/store';
 
 import type { TOrder } from '@utils-types';
 
@@ -9,14 +17,19 @@ const getOrders = (orders: TOrder[], status: string): number[] =>
     .slice(0, 20);
 
 export const FeedInfo = (): React.JSX.Element => {
+  const orders: TOrder[] = useSelector(selectFeedOrders);
+  const total = useSelector(selectFeedTotal);
+  const totalToday = useSelector(selectFeedTotalToday);
+  const isLoading = useSelector(selectFeedIsLoading);
+  const error = useSelector(selectFeedError);
+
   const feed = {
-    orders: [],
-    total: 0,
-    totalToday: 0,
-    isLoading: false,
-    error: null,
+    orders,
+    total,
+    totalToday,
+    isLoading,
+    error,
   };
-  const orders: TOrder[] = [];
 
   const readyOrders = getOrders(orders, 'done');
 
